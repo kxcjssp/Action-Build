@@ -741,6 +741,19 @@ jobs:
           curl -fsSL "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/ebf6294e929c5d3463578aa4d6c9664925c3951e/kernel/arch.h" -o "$KSU_KERNEL/arch.h"
           test -s "$KSU_KERNEL/arch.h"
 
+      - name: Patch SukiSU builtin sources
+        run: |
+          set -e
+          KSU_KERNEL="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/KernelSU/kernel"
+          test -d "$KSU_KERNEL"
+          if ! grep -q 'EVENT_SERVICES' "$KSU_KERNEL/include/uapi/supercall.h"; then
+            sed -i '/DECLARE(__u32, EVENT_MODULE_MOUNTED, 3);/a DECLARE(__u32, EVENT_SERVICES, 4);' "$KSU_KERNEL/include/uapi/supercall.h"
+          fi
+          sed -i '/struct selinux_policy [*]pol, [*]old_pol;$/d' "$KSU_KERNEL/selinux/rules.c"
+          grep -q 'EVENT_SERVICES' "$KSU_KERNEL/include/uapi/supercall.h"
+          if grep -q 'struct selinux_policy [*]pol, [*]old_pol;$' "$KSU_KERNEL/selinux/rules.c"; then
+            echo "ERROR: rules.c duplicate declaration not removed"; exit 1
+          fi
       - name: Apply Fake Patches
         if: ${{ github.event.inputs.SUSFS_META != '-1' }}
         run: |
