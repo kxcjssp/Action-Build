@@ -749,11 +749,12 @@ jobs:
           if ! grep -q 'EVENT_SERVICES' "$KSU_KERNEL/include/uapi/supercall.h"; then
             sed -i '/DECLARE(__u32, EVENT_MODULE_MOUNTED, 3);/a DECLARE(__u32, EVENT_SERVICES, 4);' "$KSU_KERNEL/include/uapi/supercall.h"
           fi
-          sed -i '/struct selinux_policy [*]pol, [*]old_pol;$/d' "$KSU_KERNEL/selinux/rules.c"
+          sed -i '/struct selinux_policy [*]pol, [*]old_pol = selinux_state.policy;/d' "$KSU_KERNEL/selinux/rules.c"
           grep -q 'EVENT_SERVICES' "$KSU_KERNEL/include/uapi/supercall.h"
-          if grep -q 'struct selinux_policy [*]pol, [*]old_pol;$' "$KSU_KERNEL/selinux/rules.c"; then
+          if grep -q 'struct selinux_policy [*]pol, [*]old_pol = selinux_state.policy;' "$KSU_KERNEL/selinux/rules.c"; then
             echo "ERROR: rules.c duplicate declaration not removed"; exit 1
           fi
+          test "$(grep -c 'struct selinux_policy [*]pol, [*]old_pol;$' "$KSU_KERNEL/selinux/rules.c")" -eq 2
       - name: Apply Fake Patches
         if: ${{ github.event.inputs.SUSFS_META != '-1' }}
         run: |
