@@ -733,6 +733,14 @@ jobs:
           grep -nE '^(REPO_OWNER|REPO_NAME|REPO_BRANCH|KSU_VERSION_API|KSU_VERSION_FULL|VERSION_TAG|GIT_BIN|CURL_BIN)' kernel/Makefile
           echo "::endgroup::"
 
+      - name: Restore archived arch.h
+        run: |
+          set -e
+          KSU_KERNEL="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/KernelSU/kernel"
+          test -d "$KSU_KERNEL"
+          curl -fsSL "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/ebf6294e929c5d3463578aa4d6c9664925c3951e/kernel/arch.h" -o "$KSU_KERNEL/arch.h"
+          test -s "$KSU_KERNEL/arch.h"
+
       - name: Apply Fake Patches
         if: ${{ github.event.inputs.SUSFS_META != '-1' }}
         run: |
