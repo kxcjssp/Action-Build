@@ -749,8 +749,11 @@ jobs:
           if ! grep -q 'EVENT_SERVICES' "$KSU_KERNEL/include/uapi/supercall.h"; then
             sed -i '/DECLARE(__u32, EVENT_MODULE_MOUNTED, 3);/a DECLARE(__u32, EVENT_SERVICES, 4);' "$KSU_KERNEL/include/uapi/supercall.h"
           fi
+          # Align kernel UAPI version with the manager APK (built from the uapi5 branch).
+          sed -i -E 's/KERNEL_SU_UAPI_VERSION, [0-9]+[)]/KERNEL_SU_UAPI_VERSION, 5)/' "$KSU_KERNEL/include/uapi/supercall.h"
           sed -i '/struct selinux_policy [*]pol, [*]old_pol = selinux_state.policy;/d' "$KSU_KERNEL/selinux/rules.c"
           grep -q 'EVENT_SERVICES' "$KSU_KERNEL/include/uapi/supercall.h"
+          grep -q 'KERNEL_SU_UAPI_VERSION, 5)' "$KSU_KERNEL/include/uapi/supercall.h"
           if grep -q 'struct selinux_policy [*]pol, [*]old_pol = selinux_state.policy;' "$KSU_KERNEL/selinux/rules.c"; then
             echo "ERROR: rules.c duplicate declaration not removed"; exit 1
           fi
