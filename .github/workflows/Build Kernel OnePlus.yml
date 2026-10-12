@@ -820,6 +820,84 @@ jobs:
             patch -p1 < 50_add_susfs_in_gki-${{ env.KANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch || true
             echo "susfs_patch完成"
           fi
+          # ===== Hide KSU/SUSFS symbols from /proc/kallsyms (non-root only) =====
+          echo "injecting kallsyms hide code"
+          python3 - <<'PYEOF'
+          import io, sys
+          nl = chr(10)
+          path = "kernel/kallsyms.c"
+          with io.open(path, "r", encoding="utf-8", errors="surrogateescape") as f:
+              src = f.read()
+          if "ksu_symbol_is_sensitive" in src:
+              print("[kallsyms_hide] already present, skip")
+              sys.exit(0)
+          helper = nl.join([
+              "",
+              "\t/* Hide KernelSU / SUSFS symbols from non-root readers of /proc/kallsyms. */",
+              "\tstatic bool ksu_symbol_is_sensitive(const char *name)",
+              "\t{",
+              "\t\tstatic const char * const blacklist[] = {",
+              "\t\t\t\"sukisu\", \"kernelsu\", \"ksu_\", \"__ksymtab_sukisu\",",
+              "\t\t\t\"__ksymtab_ksu_\", \"susfs\", \"ksud\",",
+              "\t\t\t\"bb_bprm_set_creds.ksu_sid\", \"__initcall__kmod_ksu__\",",
+              "\t\t};",
+              "\t\tint i;",
+              "",
+              "\t\tfor (i = 0; i < ARRAY_SIZE(blacklist); i++) {",
+              "\t\t\tif (strstr(name, blacklist[i]))",
+              "\t\t\t\treturn true;",
+              "\t\t}",
+              "\t\treturn false;",
+              "\t}",
+              "",
+          ])
+          anchor = "static int s_show(struct seq_file *m, void *p)"
+          defi = anchor + nl + "{"
+          idx = src.find(defi)
+          if idx < 0:
+              idx = src.find(anchor)
+          if idx < 0:
+              print("[kallsyms_hide] FATAL: s_show not found")
+              sys.exit(1)
+          src = src[:idx] + helper + src[idx:]
+          nameline = "if (!iter->name[0])"
+          nidx = src.find(nameline, idx)
+          if nidx < 0:
+              print("[kallsyms_hide] FATAL: name[0] anchor not found")
+              sys.exit(1)
+          ridx = src.find("return 0;", nidx)
+          if ridx < 0:
+              print("[kallsyms_hide] FATAL: return0 anchor not found")
+              sys.exit(1)
+          ridx = ridx + len("return 0;")
+          filt = nl.join([
+              "",
+              "\t/* Hide KSU / SUSFS symbols from unprivileged readers. */",
+              "\tif (!uid_eq(current_fsuid(), GLOBAL_ROOT_UID) &&",
+              "\t    ksu_symbol_is_sensitive(iter->name))",
+              "\t\treturn 0;",
+              "",
+          ])
+          src = src[:ridx] + filt + src[ridx:]
+          adds = []
+          if "#include <linux/cred.h>" not in src:
+              adds.append("#include <linux/cred.h>")
+          if "#include <linux/string.h>" not in src:
+              adds.append("#include <linux/string.h>")
+          if adds:
+              incblk = nl.join(adds)
+              a = "#include <linux/kallsyms.h>"
+              if a in src:
+                  src = src.replace(a, a + nl + incblk, 1)
+              else:
+                  a = "#include \"kallsyms_internal.h\""
+                  src = src.replace(a, incblk + nl + a, 1)
+          with io.open(path, "w", encoding="utf-8", errors="surrogateescape") as f:
+              f.write(src)
+          print("[kallsyms_hide] done")
+          PYEOF
+          grep -q "ksu_symbol_is_sensitive" kernel/kallsyms.c || { echo "kallsyms injection FAILED"; exit 1; }
+          # ==================================================================
           source $REJ_CHECKER
           check_rejects .
 
